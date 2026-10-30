@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: The dev kit
+        run: |
+          curl -fsSL https://github.com/christcb03/pvos-sdk/releases/download/v{{version}}/pvos-devkit-{{version}}-x86_64-linux.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "PVOS_DEVKIT=$RUNNER_TEMP/pvos-devkit" >> "$GITHUB_ENV"
+      - name: Test
+        run: cargo test --no-fail-fast
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings

@@ -1,0 +1,13 @@
+[package]
+name = "pvfs-proto"
+description = "PVFS daemon/client wire protocol — JSON frames + challenge-response (doc 07)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (PVOS D306)
+
+[dependencies]
+pvfs-crypto = { path = "../pvfs-crypto" }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true

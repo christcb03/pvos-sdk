@@ -1,0 +1,30 @@
+name: CI
+
+# This repository builds alone: no token, nothing private. Its tests run against the
+# dev kit, a release of this repository.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: The dev kit released with this version
+        run: |
+          kit=$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)
+          curl -fsSL "https://github.com/christcb03/pvos-sdk/releases/download/v$kit/pvos-devkit-$kit-x86_64-linux.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "PVOS_DEVKIT=$RUNNER_TEMP/pvos-devkit" >> "$GITHUB_ENV"
+      - name: Build
+        run: cargo build --workspace --all-targets
+      - name: Test
+        run: PVOS_TEST_GREETER="$PWD/target/debug/pvos-app-greeter" cargo test --workspace --no-fail-fast
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings

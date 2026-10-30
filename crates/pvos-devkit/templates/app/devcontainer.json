@@ -1,0 +1,10 @@
+{
+  "name": "{{name}}",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "PVOS_DEVKIT": "/home/vscode/pvos-devkit",
+    "PATH": "${containerEnv:PATH}:/home/vscode/pvos-devkit/bin"
+  },
+  "postCreateCommand": "curl -fsSL https://github.com/christcb03/pvos-sdk/releases/download/v{{version}}/pvos-devkit-{{version}}-x86_64-linux.tar.gz | tar xz -C /home/vscode"
+}

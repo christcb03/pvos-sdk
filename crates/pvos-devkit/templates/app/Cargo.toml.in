@@ -1,0 +1,12 @@
+[package]
+name = "{{crate}}"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pvos-sdk = { {{sdk}} }
+serde_json = "1"
+
+[dev-dependencies]
+pvos-devkit = { {{devkit}} }

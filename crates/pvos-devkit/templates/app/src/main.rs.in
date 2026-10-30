@@ -1,0 +1,104 @@
+//! {{name}}: a PVOS app. PVOS starts it with two variables set, and it attaches
+//! with its own key. It publishes a service, and shows a window that lists who it
+//! has greeted.
+
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use pvos_sdk::keys::{crypto, identity::DeviceKeyCache};
+use pvos_sdk::proto::manifest::ServiceDecl;
+use pvos_sdk::proto::{AlertLevel, CallOutcome, Component, UiPhase, ViewModel};
+use serde_json::json;
+
+fn view(greeted: &[String]) -> ViewModel {
+    let list = if greeted.is_empty() {
+        Component::Alert { level: AlertLevel::Info, text: "Nobody yet.".into() }
+    } else {
+        Component::Table {
+            columns: vec!["greeted".into()],
+            rows: greeted.iter().map(|n| vec![format!("hello {n}")]).collect(),
+            row_action: None,
+            row_buttons: vec![],
+            row_keys: vec![],
+            time_columns: vec![],
+        }
+    };
+    ViewModel {
+        back: None,
+        root: Component::Stack {
+            id: None,
+            horizontal: false,
+            children: vec![
+                Component::Heading { text: "{{name}}".into() },
+                list,
+                Component::Form {
+                    action: "greet".into(),
+                    children: vec![Component::Field {
+                        id: Some("name".into()),
+                        label: "Name".into(),
+                        value: String::new(),
+                        action: None,
+                        secret: false,
+                    }],
+                    horizontal: false,
+                },
+            ],
+        },
+    }
+}
+
+fn main() {
+    pvos_sdk::init_logging("{{crate}}");
+    let control = std::env::var("PVOS_CONTROL_SOCKET").expect("PVOS starts this app");
+    let app_dir = std::env::var("PVOS_APP_DIR").expect("PVOS starts this app");
+    let key = DeviceKeyCache::load(Path::new(&app_dir)).expect("device.key");
+    let conn = Arc::new(
+        pvos_sdk::connect(Path::new(&control), &key.pubkey(), |d| {
+            crypto::sign_digest(&key.signing_key, d).unwrap()
+        })
+        .expect("attach"),
+    );
+    let greeted: Arc<Mutex<Vec<String>>> = Arc::default();
+
+    let greet = {
+        let (conn, greeted) = (conn.clone(), greeted.clone());
+        move |name: &str| {
+            greeted.lock().unwrap().push(name.to_string());
+            let _ = conn.push_view_model("main", view(&greeted.lock().unwrap()));
+        }
+    };
+
+    // Set the handler first, then publish, so no call finds the app without one.
+    let on_call = greet.clone();
+    conn.on_call(move |_service, method, args| match method {
+        "greet" => {
+            let name = args["name"].as_str().unwrap_or("?");
+            on_call(name);
+            CallOutcome::Ok { value: json!(format!("hello {name}")) }
+        }
+        other => CallOutcome::Err { code: "no_such_method".into(), message: other.into() },
+    });
+    conn.publish(ServiceDecl {
+        name: "hello".into(),
+        version: "0.1.0".into(),
+        interface: None,
+        methods: vec!["greet".into()],
+        api: vec![],
+    })
+    .expect("publish");
+
+    // A window opened: show it the view. Its form submitted: greet.
+    let opened = (conn.clone(), greeted.clone());
+    conn.on_lifecycle(move |surface, phase, _actor| {
+        if surface == "main" && matches!(phase, UiPhase::Open | UiPhase::Focus) {
+            let _ = opened.0.push_view_model("main", view(&opened.1.lock().unwrap()));
+        }
+    });
+    conn.on_ui_event(move |surface, action, payload, _actor| {
+        if surface == "main" && action == "greet" {
+            greet(payload["name"].as_str().unwrap_or("?"));
+        }
+    });
+
+    conn.wait_closed();
+}

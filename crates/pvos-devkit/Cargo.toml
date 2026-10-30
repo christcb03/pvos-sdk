@@ -1,0 +1,23 @@
+[package]
+name = "pvos-devkit"
+description = "Test a PVOS app against the real PVOS: a throwaway forest and pvosd, an owner, a signed-in desktop. Also the pvos-dev tool."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (D306)
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pvos-dev"
+path = "src/bin/pvos-dev.rs"
+
+[dependencies]
+pvos-sdk = { path = "../pvos-sdk" }
+hex.workspace = true
+libc.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tungstenite.workspace = true

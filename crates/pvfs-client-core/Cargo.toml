@@ -1,0 +1,19 @@
+[package]
+name = "pvfs-client-core"
+description = "The PVFS client: connect to a pvfsd and speak its protocol, with no engine (PVOS D306)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (PVOS D306)
+
+[dependencies]
+pvfs-crypto = { path = "../pvfs-crypto" }
+pvfs-proto = { path = "../pvfs-proto" }
+# PVOS D222: every daemon-side line goes through the pv_* macros.
+pvfs-log = { path = "../pvfs-log" }
+blake3.workspace = true
+hex.workspace = true
+# F1 network transport (doc 17 §4): TLS connect pinned to the instance's
+# certificate hash — no CA, no roots.
+rustls.workspace = true
+nix.workspace = true

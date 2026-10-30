@@ -1,0 +1,35 @@
+//! {{name}} against the real PVOS: the dev kit's pvosd and pvfsd, in a temp folder.
+
+use pvos_devkit::{view, wait_for, App, Instance};
+use pvos_sdk::proto::ProviderId;
+use serde_json::json;
+
+const APP: &str = "{{id}}";
+
+#[test]
+fn greets_over_a_service_and_in_its_window() {
+    let pvos = Instance::start().unwrap();
+    pvos.install(&App::new(
+        env!("CARGO_BIN_EXE_{{crate}}"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/manifest.json"),
+    ))
+    .unwrap();
+    pvos.start_app(APP).unwrap();
+
+    // The app publishes after its handlers are set, so an answer means it is ready.
+    let owner = pvos.owner().unwrap();
+    let provider = ProviderId(APP.into());
+    wait_for("the app to answer", || {
+        owner.call(&provider, "hello", "greet", json!({ "name": "world" })).is_ok()
+    });
+
+    let mut desktop = pvos.desktop().unwrap();
+    desktop.open_surface(APP, "main");
+    let window = desktop.next_view(APP, "main");
+    assert_eq!(view::rows_of_table_with(&window, "greeted"), vec![vec!["hello world".to_string()]]);
+
+    // The window's form does the same.
+    desktop.ui_event(APP, "main", "greet", json!({ "name": "form" }));
+    let window = desktop.next_view(APP, "main");
+    assert!(window.to_string().contains("hello form"), "{window}");
+}

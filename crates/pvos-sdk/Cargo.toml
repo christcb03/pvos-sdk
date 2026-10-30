@@ -1,0 +1,18 @@
+[package]
+name = "pvos-sdk"
+description = "PVOS app SDK: connect to the control socket, attach, request capabilities, publish/consume services, mount UI."
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (D306)
+repository.workspace = true
+
+[dependencies]
+pvos-proto = { path = "../pvos-proto" }
+serde.workspace = true
+serde_json.workspace = true
+pvfs-client-core.workspace = true # app storage channel (Channel 1)
+pvfs-crypto.workspace = true # the app's key; `pvos_sdk::keys`
+pvfs-proto.workspace = true # `pvos_sdk::pvfs::wire`
+hex.workspace = true
+# PVOS D222: the pv_* log macros, re-exported for apps (`pvos_sdk::pv_info!`).
+pvfs-log.workspace = true

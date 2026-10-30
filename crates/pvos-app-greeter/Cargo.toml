@@ -1,0 +1,16 @@
+[package]
+name = "pvos-app-greeter"
+description = "Example PVOS app (M2): publishes `greeter`, serves calls, emits events, runs async jobs, and self-registers a scheduler job when granted `schedule`."
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (D306)
+repository.workspace = true
+
+[[bin]]
+name = "pvos-app-greeter"
+path = "src/main.rs"
+
+[dependencies]
+pvos-sdk = { path = "../pvos-sdk" }
+pvos-proto = { path = "../pvos-proto" }
+serde_json.workspace = true

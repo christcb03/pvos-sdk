@@ -1,0 +1,29 @@
+[package]
+name = "pvfs-crypto"
+description = "PVFS keys and formats: signatures, recovery-phrase keys, envelope encryption, canonical encoding, access rules (PVOS D306)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0" # the public SDK (PVOS D306)
+
+[features]
+# PvfsError's sqlite variants. pvfs-core turns this on, so the engine and
+# everything above it share one error type; an app, with no engine, has no
+# sqlite in its build.
+db = ["dep:rusqlite"]
+
+[dependencies]
+# PVOS D222: the key file's warnings go through the pv_* macros.
+pvfs-log = { path = "../pvfs-log" }
+blake3.workspace = true
+k256.workspace = true
+chacha20poly1305.workspace = true
+bip39.workspace = true
+bip32.workspace = true
+rusqlite = { workspace = true, optional = true }
+thiserror.workspace = true
+hex.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

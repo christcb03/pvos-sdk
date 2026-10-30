@@ -1,0 +1,15 @@
+{
+  "id": "{{id}}",
+  "version": "0.1.0",
+  "api_version": 1,
+  "display_name": "{{name}}",
+  "description": "What it does, in a sentence the owner reads at install.",
+  "tier": "user",
+  "residency": "integrated",
+  "capabilities": { "required": [], "optional": [] },
+  "services_provided": [{ "name": "hello", "version": "0.1.0", "methods": ["greet"] }],
+  "ui": { "surfaces": [{ "name": "main", "mode": "viewmodel" }] },
+  "headless": false,
+  "admin_only": false,
+  "runtime": { "kind": "native", "entrypoint": "./{{crate}}" }
+}
