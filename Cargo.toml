@@ -4,7 +4,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.96"
 license = "MIT OR Apache-2.0"
@@ -12,12 +12,12 @@ repository = "https://github.com/christcb03/pvos-sdk"
 
 [workspace.dependencies]
 base64 = "0.22"
-bip32 = "0.5"
+bip32 = { version = "0.6", features = ["alloc"] }
 bip39 = { version = "2.1", features = ["rand"] }
 blake3 = { version = "1.5", features = ["rayon"] }
 chacha20poly1305 = "0.10"
 hex = "0.4"
-k256 = { version = "0.13", features = ["ecdh"] }
+k256 = { version = "0.14", features = ["ecdh", "getrandom"] }
 libc = "0.2"
 nix = { version = "0.29", features = ["user", "fs", "socket"] }
 pvfs-client-core = { path = "crates/pvfs-client-core" }
@@ -26,7 +26,7 @@ pvfs-log = { path = "crates/pvfs-log" }
 pvfs-proto = { path = "crates/pvfs-proto" }
 rand = "0.8"
 rcgen = "0.13"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.42", features = ["bundled"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 rustls-pemfile = "2"
 serde = { version = "1", features = ["derive"] }

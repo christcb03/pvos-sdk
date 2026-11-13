@@ -197,7 +197,7 @@ fn derive(mnemonic: &Mnemonic, bip39_passphrase: &str, path: &str) -> Result<Sig
     let seed = mnemonic.to_seed(bip39_passphrase);
     let parsed: bip32::DerivationPath = path.parse().map_err(identity_err("derivation path"))?;
     let xprv =
-        bip32::XPrv::derive_from_path(seed, &parsed).map_err(identity_err("key derivation"))?;
+        bip32::XPrv::derive_from_path(&seed, &parsed).map_err(identity_err("key derivation"))?;
     Ok(xprv.private_key().clone())
 }
 
@@ -214,8 +214,8 @@ pub fn root_key(mnemonic: &Mnemonic, bip39_passphrase: &str) -> Result<SigningKe
 /// root-signed by an external companion: the machine gets its own key and a
 /// root-signed `DeviceAuthorized` cert, without exposing the recovery phrase.
 pub fn generate_device_key() -> SigningKey {
-    use rand::rngs::OsRng;
-    SigningKey::random(&mut OsRng)
+    use k256::elliptic_curve::Generate;
+    SigningKey::generate()
 }
 
 /// Device signing key `n` — the everyday author on one machine.

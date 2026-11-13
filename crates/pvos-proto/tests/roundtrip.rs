@@ -934,7 +934,14 @@ fn desktop_ws_frames_roundtrip() {
         session_pubkey: "02ab".into(),
     });
     roundtrip(&DesktopToServer::SessionCert { at: 1, expires_at: 2, sigs: vec!["aa".into(), "bb".into()] });
-    roundtrip(&ServerToDesktop::BindChallenge { nonce: "00".into() });
+    roundtrip(&ServerToDesktop::BindChallenge { nonce: "00".into(), key: String::new() });
+    // PVOS D322: the key the session is bound to, and a frame from an older
+    // pvosd without one.
+    roundtrip(&ServerToDesktop::BindChallenge { nonce: "00".into(), key: "04ab".into() });
+    assert_eq!(
+        serde_json::from_str::<ServerToDesktop>(r#"{"type":"bind_challenge","nonce":"00"}"#).unwrap(),
+        ServerToDesktop::BindChallenge { nonce: "00".into(), key: String::new() }
+    );
     roundtrip(&DesktopToServer::BindProof { sig: "aa".into() });
     roundtrip(&ServerToDesktop::Session { token: "t".into() });
     // D212: the grant, its renewal, and a session that ended.
@@ -1346,7 +1353,7 @@ fn bridge_frames_roundtrip() {
 #[test]
 fn settings_frames_roundtrip() {
     use pvos_proto::desktop::{
-        AppShareView, ImpactView, LogDestinationEdit, LogDestinationView, LoggingView, MailView,
+        AppShareView, ImpactView, LogDestinationEdit, LogDestinationView, LogLevelView, LoggingView, MailView,
         SessionView, SettingsOp, SettingsState, ShareView,
     };
     // D222d: one destination as the Settings form edits it.
@@ -1393,6 +1400,7 @@ fn settings_frames_roundtrip() {
         SettingsOp::LogSet { original: None, dest: dest.clone(), token: None },
         SettingsOp::LogRemove { name: "siem".into() },
         SettingsOp::LogTest { name: "siem".into() },
+        SettingsOp::LogLevelSet { level: "debug".into(), minutes: 5 },
     ] {
         roundtrip(&DesktopToServer::Authed {
             token: "t".into(),
@@ -1450,6 +1458,7 @@ fn settings_frames_roundtrip() {
                 last_error: String::new(),
                 failing: false,
             }],
+            log_level: LogLevelView { configured: "info".into(), current: "debug".into(), until_ms: Some(1_700_000_060_000) },
         }),
         // PVOS D262: DNS for PVOS apps.
         can_dns: true,

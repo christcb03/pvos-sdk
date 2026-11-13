@@ -26,8 +26,8 @@ pub struct Instance {
     http_addr: String,
     owner_key: DeviceKeyCache,
     owner: Option<Member>,
-    /// One attached owner, shared: pvosd knows a connection by who it is, so a second
-    /// `@owner` closing would take the first one's replies with it.
+    /// One attached owner, kept so a test does not open a new socket per call.
+    /// A second owner connection is safe (D313); this one is shared for convenience.
     owner_conn: Mutex<Option<Arc<AppConn>>>,
     children: Vec<Child>,
 }
@@ -298,10 +298,9 @@ impl Instance {
 
     /// Run the real `pvos` CLI against this instance, and return what it printed.
     ///
-    /// The CLI attaches as the owner, so a connection [`Instance::owner`] gave you
-    /// earlier stops working: ask for it again afterwards.
+    /// The CLI attaches as the owner beside any connection [`Instance::owner`]
+    /// already holds. Both stay up (D313).
     pub fn pvos(&self, args: &[OsString]) -> Result<String> {
-        *self.owner_conn.lock().expect("the owner's connection") = None;
         let mut command = Command::new(self.kit.bin("pvos"));
         command
             .args(args)

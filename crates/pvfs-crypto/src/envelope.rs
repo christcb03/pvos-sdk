@@ -16,6 +16,7 @@
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use k256::ecdsa::SigningKey;
+use k256::elliptic_curve::Generate;
 use rand::RngCore;
 
 use crate::encoding::{Dec, Enc};
@@ -70,7 +71,7 @@ fn wrap_for(recipient_pub: &[u8], content_key: &[u8; KEY_LEN]) -> Result<Wrap> {
     crate::crypto::validate_pubkey(recipient_pub)?;
     // Fresh ephemeral key per wrap: the recipient recovers the KEK from
     // ECDH(recipient_secret, ephemeral_pub).
-    let eph = SigningKey::random(&mut rand::thread_rng());
+    let eph = SigningKey::generate();
     let k = kek(&eph, recipient_pub)?;
     let mut nonce = [0u8; NONCE_LEN];
     rand::thread_rng().fill_bytes(&mut nonce);

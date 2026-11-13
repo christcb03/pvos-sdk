@@ -315,6 +315,9 @@ pub enum SettingsOp {
     LogRemove { name: String },
     /// Send one test event to a destination now.
     LogTest { name: String },
+    /// PVOS D315: the live log level. `default` goes back to the configured
+    /// level now; anything else lasts `minutes` (1 to 1440).
+    LogLevelSet { level: String, minutes: u32 },
     // ---- D64: PVFS mounts (owner-only; every op rides the pvfs CLI) ------
     /// Enroll a space (doc 21): bind `folder` — a tree path under the
     /// forest root, missing folders created on the way — to host directory
@@ -510,9 +513,21 @@ pub struct LogDestinationView {
     pub failing: bool,
 }
 
+/// PVOS D315: the level pvosd is logging at. `until_ms` is set only while a
+/// live override has not run out.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct LogLevelView {
+    pub configured: String,
+    pub current: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct LoggingView {
     pub destinations: Vec<LogDestinationView>,
+    #[serde(default)]
+    pub log_level: LogLevelView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -703,8 +718,14 @@ pub enum ServerToDesktop {
         session_pubkey: String,
     },
     /// D193: a remembered session on a new connection — prove the browser
-    /// key it is bound to (`BindProof`) before it is restored.
-    BindChallenge { nonce: String },
+    /// key it is bound to (`BindProof`) before it is restored. PVOS D322:
+    /// `key` is that key's public half, so a page holding several (one per
+    /// tab's sign-in) signs with the right one; empty from an older pvosd.
+    BindChallenge {
+        nonce: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        key: String,
+    },
     /// Login succeeded — the session token for subsequent `Authed` frames.
     Session { token: String },
     /// D212: this session's grant in the person's own forest — sent after

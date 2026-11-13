@@ -596,7 +596,6 @@ fn reader_loop(mut stream: UnixStream, inner: Arc<Inner>) {
                 // D59: counted HERE, on the reader — a ParkHint behind this
                 // call in the same channel must find it already in flight.
                 inner.calls_inflight.fetch_add(1, Ordering::SeqCst);
-                let handler = inner.on_call.lock().unwrap().clone();
                 let inner = inner.clone();
                 std::thread::spawn(move || {
                     // Decrement on every exit, panicking handlers included —
@@ -608,6 +607,14 @@ fn reader_loop(mut stream: UnixStream, inner: Arc<Inner>) {
                         }
                     }
                     let _guard = Inflight(inner.clone());
+                    // D327: a call can arrive while the app is still starting,
+                    // before it registered its handler (a scheduler fire that
+                    // woke it, say). Wait for the handler instead of refusing.
+                    let handler = await_handler(
+                        || inner.on_call.lock().unwrap().clone(),
+                        HANDLER_WAIT,
+                        HANDLER_POLL,
+                    );
                     let outcome = match handler {
                         Some(h) => h(&service, &method, args),
                         None => CallOutcome::Err {
@@ -628,20 +635,21 @@ fn reader_loop(mut stream: UnixStream, inner: Arc<Inner>) {
                 let inner = inner.clone();
                 std::thread::spawn(move || {
                     let busy = inner.calls_inflight.load(Ordering::SeqCst);
-                    if busy > 0 {
-                        pv_info!("pvos.sdk.park_declined", inflight = busy;
-                            "pvos-sdk: declining park — {busy} service call(s) in flight");
+                    let waiting = inner.pending.lock().unwrap().len();
+                    if let Some(why) = park_decline(busy, waiting) {
+                        pv_info!("pvos.sdk.park_declined", inflight = busy, waiting = waiting as u64;
+                            "pvos-sdk: declining park — {why}");
                         return;
                     }
                     let ok = handler.map(|h| h()).unwrap_or(true);
                     if ok {
-                        // Re-check: a fire may have arrived during the
-                        // consult (it can flush state for a while).
-                        if inner.calls_inflight.load(Ordering::SeqCst) > 0 {
-                            pv_info!(
-                                "pvos.sdk.park_declined";
-                                "pvos-sdk: declining park — a service call arrived mid-consult"
-                            );
+                        // Re-check: a fire, or a request of our own, may have
+                        // started during the consult (it can flush state).
+                        let busy = inner.calls_inflight.load(Ordering::SeqCst);
+                        let waiting = inner.pending.lock().unwrap().len();
+                        if let Some(why) = park_decline(busy, waiting) {
+                            pv_info!("pvos.sdk.park_declined", inflight = busy, waiting = waiting as u64;
+                                "pvos-sdk: declining park — {why}");
                             return;
                         }
                         pv_notice!("pvos.sdk.parking";
@@ -740,7 +748,9 @@ impl AppConn {
     // ── provider surface ────────────────────────────────────────────────
 
     /// Register the handler for incoming service calls. Set this BEFORE
-    /// `publish` so no call finds the app handler-less.
+    /// `publish`. A call that arrives before it (a scheduler fire that woke
+    /// the app, say) waits up to 10 s for it (D327), then is answered
+    /// `no_handler`.
     pub fn on_call<H>(&self, handler: H)
     where
         H: Fn(&str, &str, Value) -> CallOutcome + Send + Sync + 'static,
@@ -1708,10 +1718,78 @@ fn split_netloc(netloc: &str) -> std::io::Result<(&str, u16)> {
     Ok((host.trim_start_matches('[').trim_end_matches(']'), port))
 }
 
+/// PVOS D316 — park is declined while this process owes an answer, or is
+/// waiting on one of its own. `None` means it may park.
+fn park_decline(incoming: u64, outgoing: usize) -> Option<&'static str> {
+    if incoming > 0 {
+        return Some("a service call is in flight");
+    }
+    if outgoing > 0 {
+        return Some("a request is still unanswered");
+    }
+    None
+}
+
 fn unexpected(want: &str, got: Option<ServerMsg>) -> SdkError {
     match got {
         None => SdkError::Protocol(format!("closed before {want}")),
         Some(m) => SdkError::Protocol(format!("expected {want}, got {m:?}")),
+    }
+}
+
+/// D327: how long an incoming call waits for the app to register its
+/// handler before it is answered `no_handler`.
+const HANDLER_WAIT: Duration = Duration::from_secs(10);
+const HANDLER_POLL: Duration = Duration::from_millis(25);
+
+/// D327: the handler, once there is one, waiting up to `wait` for it.
+fn await_handler(
+    get: impl Fn() -> Option<CallHandler>,
+    wait: Duration,
+    poll: Duration,
+) -> Option<CallHandler> {
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(h) = get() {
+            return Some(h);
+        }
+        if start.elapsed() >= wait {
+            return None;
+        }
+        std::thread::sleep(poll);
+    }
+}
+
+#[cfg(test)]
+mod d327_await_handler {
+    use super::{await_handler, CallHandler};
+    use pvos_proto::CallOutcome;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    fn handler() -> CallHandler {
+        Arc::new(|_: &str, _: &str, _| CallOutcome::Ok { value: serde_json::json!(null) })
+    }
+
+    #[test]
+    fn a_call_waits_for_a_handler_registered_late() {
+        let asked = AtomicU32::new(0);
+        let got = await_handler(
+            || (asked.fetch_add(1, Ordering::SeqCst) >= 3).then(handler),
+            Duration::from_secs(5),
+            Duration::from_millis(1),
+        );
+        assert!(got.is_some());
+        assert_eq!(asked.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn no_handler_at_all_still_ends() {
+        let start = std::time::Instant::now();
+        let got = await_handler(|| None, Duration::from_millis(50), Duration::from_millis(5));
+        assert!(got.is_none());
+        assert!(start.elapsed() >= Duration::from_millis(50));
     }
 }
 
@@ -1725,5 +1803,18 @@ mod d262_tests {
         assert_eq!(split_netloc("[fd00::1]:443").unwrap(), ("fd00::1", 443));
         assert!(split_netloc("no-port").is_err());
         assert!(split_netloc("host:http").is_err());
+    }
+}
+
+#[cfg(test)]
+mod d316_park_decline {
+    use super::park_decline;
+
+    #[test]
+    fn a_call_either_way_holds_the_park() {
+        assert_eq!(park_decline(0, 0), None);
+        assert_eq!(park_decline(1, 0), Some("a service call is in flight"));
+        assert_eq!(park_decline(0, 2), Some("a request is still unanswered"));
+        assert_eq!(park_decline(1, 1), Some("a service call is in flight"));
     }
 }

@@ -6,7 +6,7 @@
 
 use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::sec1::ToSec1Point;
 
 use crate::error::{IntegrityReason, PvfsError, Result};
 
@@ -16,7 +16,7 @@ pub const SWARM_CHUNK: u64 = 8 * 1024 * 1024;
 /// Compressed SEC1 public key bytes (33 bytes) for a signing key.
 pub fn pubkey_bytes(key: &SigningKey) -> Vec<u8> {
     let pk = k256::PublicKey::from(key.verifying_key());
-    pk.to_encoded_point(true).as_bytes().to_vec()
+    pk.to_sec1_point(true).as_bytes().to_vec()
 }
 
 /// Sign a 32-byte digest; returns compact 64-byte low-s signature.
@@ -25,7 +25,7 @@ pub fn sign_digest(key: &SigningKey, digest: &[u8; 32]) -> Result<Vec<u8>> {
         detail: format!("signing failed: {e}"),
     })?;
     // RFC 6979 in k256 already yields low-s; normalize defensively anyway.
-    let sig = sig.normalize_s().unwrap_or(sig);
+    let sig = sig.normalize_s();
     Ok(sig.to_bytes().to_vec())
 }
 
@@ -42,7 +42,7 @@ pub fn verify_digest(author: &[u8], digest: &[u8; 32], sig: &[u8]) -> Result<()>
         id: hex::encode(author),
         reason: IntegrityReason::SignatureInvalid,
     })?;
-    if sig.normalize_s().is_some() {
+    if sig.normalize_s() != sig {
         // s was high — malleable form is rejected outright.
         return Err(PvfsError::Integrity {
             kind: "signature",
