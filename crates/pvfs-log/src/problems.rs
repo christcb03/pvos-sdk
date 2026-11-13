@@ -8,8 +8,11 @@
 //! read back. pvfsd and its mounts share `<data dir>/log-problems.jsonl`;
 //! the companion writes `~/Library/Logs/PVFS/companion-problems.jsonl`.
 //!
-//! It is rendered at the process's local privacy, as the box's own log is,
-//! and capped at [`CAP_BYTES`]: past that it becomes `.1` (one old copy).
+//! It is always rendered at `full`, whatever the process's privacy level
+//! (PVOS D332): the file is local and 0600, and it is what a diagnosis needs,
+//! while the journal may run at `identified` because the journal leaves the
+//! box (Alloy ships it to Loki). It is capped at [`CAP_BYTES`]: past that it
+//! becomes `.1` (one old copy).
 //! Writing it never fails a record and never logs.
 
 use std::io::Write;
@@ -54,8 +57,9 @@ pub(crate) fn offer(rec: &Record) {
         return;
     }
     let Some(p) = path() else { return };
-    let lg = crate::logger();
-    let view = crate::render(rec, lg.cfg.privacy, lg.cfg.pseudonym_key.as_ref());
+    // PVOS D332: full detail, whatever the journal's level — this file stays
+    // on the box.
+    let view = crate::render(rec, crate::Privacy::Full, None);
     let mut line = crate::to_json(rec, &view);
     line.push('\n');
     append(&p, &line);

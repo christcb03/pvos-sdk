@@ -1737,6 +1737,36 @@ fn unexpected(want: &str, got: Option<ServerMsg>) -> SdkError {
     }
 }
 
+/// PVOS D335 — this app's signing key. pvosd hands it over at start on the
+/// file descriptor `PVOS_APP_KEY_FD` names, from the keychain, so it is never
+/// a file; from a pvosd before D335 it is `device.key` in `PVOS_APP_DIR`.
+pub fn app_key() -> Result<keys::identity::DeviceKeyCache> {
+    if let Some(fd) = std::env::var("PVOS_APP_KEY_FD").ok().and_then(|v| v.trim().parse::<i32>().ok()) {
+        use std::io::Read;
+        use std::os::unix::io::FromRawFd;
+        // SAFETY: pvosd opened this descriptor for this process alone; it is
+        // read to its end and closed here, once.
+        let mut f = unsafe { std::fs::File::from_raw_fd(fd) };
+        let mut text = String::new();
+        f.read_to_string(&mut text).map_err(SdkError::Io)?;
+        return parse_app_key(&text);
+    }
+    let dir = std::env::var_os("PVOS_APP_DIR")
+        .ok_or_else(|| SdkError::Protocol("no PVOS_APP_KEY_FD or PVOS_APP_DIR: this app was not started by pvosd".into()))?;
+    keys::identity::DeviceKeyCache::load(std::path::Path::new(&dir))
+        .map_err(|e| SdkError::Protocol(format!("device.key: {e}")))
+}
+
+/// The key in `device.key`'s format: its hex, then its device index.
+fn parse_app_key(text: &str) -> Result<keys::identity::DeviceKeyCache> {
+    let bad = |why: &str| SdkError::Protocol(format!("the app key pvosd handed over: {why}"));
+    let mut lines = text.lines();
+    let raw = hex::decode(lines.next().ok_or_else(|| bad("empty"))?.trim()).map_err(|_| bad("not hex"))?;
+    let device_index = lines.next().unwrap_or("0").trim().parse().map_err(|_| bad("bad index"))?;
+    let signing_key = keys::identity::SigningKey::from_slice(&raw).map_err(|_| bad("not a key"))?;
+    Ok(keys::identity::DeviceKeyCache { signing_key, device_index })
+}
+
 /// D327: how long an incoming call waits for the app to register its
 /// handler before it is answered `no_handler`.
 const HANDLER_WAIT: Duration = Duration::from_secs(10);
@@ -1757,6 +1787,28 @@ fn await_handler(
             return None;
         }
         std::thread::sleep(poll);
+    }
+}
+
+#[cfg(test)]
+mod d335_app_key {
+    use super::*;
+    use std::io::Write;
+    use std::os::unix::io::IntoRawFd;
+
+    #[test]
+    fn the_key_arrives_on_a_descriptor() {
+        let k = keys::identity::device_key(&keys::identity::generate_mnemonic().unwrap(), "", 0).unwrap();
+        let text = format!("{}\n{}\n", hex::encode(k.to_bytes()), 7);
+        let (mut w, r) = std::os::unix::net::UnixStream::pair().unwrap();
+        w.write_all(text.as_bytes()).unwrap();
+        drop(w);
+        std::env::set_var("PVOS_APP_KEY_FD", r.into_raw_fd().to_string());
+        let got = app_key().unwrap();
+        std::env::remove_var("PVOS_APP_KEY_FD");
+        assert_eq!(got.signing_key.to_bytes(), k.to_bytes());
+        assert_eq!(got.device_index, 7);
+        assert!(parse_app_key("zz\n0\n").is_err());
     }
 }
 

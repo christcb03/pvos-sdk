@@ -125,6 +125,12 @@ pub struct Integrity {
     /// serving assets from the forest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui_root: Option<String>,
+    /// PVOS D335 — the BLAKE3 hash of the app's program, kept in the forest as
+    /// a blob at `/apps/<id>/bin/<seq>-<hash>`. pvosd runs that blob (checked
+    /// against this hash), not a file on disk. Set by the install, never by
+    /// the caller.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

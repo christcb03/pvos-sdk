@@ -16,7 +16,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pvos_sdk::keys::{crypto, identity::DeviceKeyCache};
+use pvos_sdk::keys::crypto;
 use pvos_proto::{
     AlertLevel, CallOutcome, CapKind, Component, Job, Schedule, Scope, ServiceCallSpec, UiPhase,
     ViewModel,
@@ -79,8 +79,8 @@ fn main_view(greeted: &[String]) -> ViewModel {
 fn main() {
     pvos_sdk::init_logging("greeter");
     let control = std::env::var("PVOS_CONTROL_SOCKET").expect("PVOS_CONTROL_SOCKET");
-    let app_dir = std::env::var("PVOS_APP_DIR").expect("PVOS_APP_DIR");
-    let key = DeviceKeyCache::load(Path::new(&app_dir)).expect("device.key in PVOS_APP_DIR");
+    // PVOS D335: from pvosd (the keychain), or device.key before D335.
+    let key = pvos_sdk::app_key().expect("the app's key");
     let pubkey = key.pubkey();
 
     let conn = Arc::new(
