@@ -14,5 +14,7 @@ pvfs-client-core.workspace = true # app storage channel (Channel 1)
 pvfs-crypto.workspace = true # the app's key; `pvos_sdk::keys`
 pvfs-proto.workspace = true # `pvos_sdk::pvfs::wire`
 hex.workspace = true
+# PVOS D336: person-store bytes travel base64 in the call's JSON.
+base64.workspace = true
 # PVOS D222: the pv_* log macros, re-exported for apps (`pvos_sdk::pv_info!`).
 pvfs-log.workspace = true

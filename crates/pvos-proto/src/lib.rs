@@ -27,7 +27,7 @@ pub use behavior::{
 pub use capability::{CapKind, Capability, ProviderId, Rights, Scope, ServiceSel};
 pub use companion::{
     verify_code, AgentRequest, AgentResponse, ApprovalContext, ConfirmFields, GenesisFields, LoginFields,
-    PairingInfo, RelayPayload, SessionCertFields, AGENT_API_VERSION, RELAY_DOMAIN,
+    JobGrantFields, PairingInfo, RelayPayload, SessionCertFields, AGENT_API_VERSION, RELAY_DOMAIN,
 };
 pub use control::{
     auth_digest, AdminAppInfo, AdminGrantInfo, ApiMethodInfo, ApiTokenInfo, CapChange, ClientMsg,
@@ -35,7 +35,7 @@ pub use control::{
     MemberInfo, ServerMsg, SessionInfo, UiFile, UiPhase, ADMIN_APP_ID, API_VERSION,
     MAX_UI_BUNDLE_BYTES, OP_INSTALL_APP,
 };
-pub use desktop::{BridgeOp, DesktopAction, DesktopToServer, RelayOutcome, ServerToDesktop};
+pub use desktop::{BridgeOp, DesktopAction, DesktopToServer, JobGrantInfo, RelayOutcome, ServerToDesktop};
 pub use grant::{Depth, Grant, GrantId, GrantRecord, Issuer, Subject};
 pub use manifest::{
     ApiMethod, AppManifest, CapRequest, Integrity, Residency, Runtime, ScopeHint, ServiceDecl,

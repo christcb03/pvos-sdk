@@ -92,6 +92,33 @@ pub enum DesktopToServer {
     /// member, whose page has just unlocked the key with a tap), then a
     /// fresh `SessionGrant`; a refusal is `Error { code: "renew" }`.
     RenewGrant { token: String },
+    /// D336: the page's answer to `DataKeyRequest` for this connection's
+    /// session — the person's encryption key (`2'/0'`, hex), and, when the
+    /// request named a wrap, that wrap's key (PVFS `envelope::wrap_kek`,
+    /// hex). The encryption key's secret never leaves the page.
+    DataKeyAnswer {
+        token: String,
+        encryption_pub: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kek: Option<String>,
+    },
+    /// D336 part 3: this session's person's background work — answered with
+    /// `JobGrants`.
+    JobGrants { token: String },
+    /// D336 part 3: allow (`revoke: false`) or stop an app's background work
+    /// on this person's data. pvosd asks for their signature — the `job_cert`
+    /// / `job_revoke` relay (a companion member) or `JobCertRequest` (a
+    /// passkey member, whose page has just unlocked the key with a tap) —
+    /// then answers `JobGrants`; a refusal is `Error { code: "job_grant" }`.
+    JobGrant {
+        token: String,
+        app: String,
+        #[serde(default)]
+        revoke: bool,
+    },
+    /// D336 part 3: a passkey page's signatures for `JobCertRequest`, built
+    /// by the page from the request's fields at the time `at` it chose.
+    JobCert { at: u64, sigs: Vec<String> },
 }
 
 /// What came back from the companion's `/relay` (M3.1).
@@ -735,6 +762,40 @@ pub enum ServerToDesktop {
     /// the companion (`via: "companion"`), or after a passkey tap the person
     /// gives (`via: "passkey"`).
     SessionGrant { ends_ms: u64, renew_from_ms: u64, via: String },
+    /// D336: unlock this session's app data — sent to a passkey member's page
+    /// after sign-in and after a restore while the session is locked. With a
+    /// record, `recipient` and `ephemeral_pubkey` (hex) name its wrap: the
+    /// page answers with that wrap's key if `recipient` is its encryption
+    /// key. Without (`None`), the page answers with its encryption key alone
+    /// and a data key is made, sealed to it. After a restore the page asks
+    /// for a passkey tap first.
+    DataKeyRequest {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recipient: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ephemeral_pubkey: Option<String>,
+    },
+    /// D336: this session's app data is unlocked.
+    DataUnlocked,
+    /// D336 part 3: the apps that keep data for this person (`pvos.store`),
+    /// and which of them may work on it while they are away.
+    JobGrants { apps: Vec<JobGrantInfo> },
+    /// D336 part 3: sign a job grant (`revoke: false`: the job key a member
+    /// of the personal forest, `rw` on `node_id`, no expiry) or its end (the
+    /// job key revoked). The page checks `binding_sig` as for a session
+    /// certificate and builds the events itself.
+    JobCertRequest {
+        revoke: bool,
+        app: String,
+        member: String,
+        rp_id: String,
+        forest_id: String,
+        root_node_id: String,
+        binding_sig: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        node_id: String,
+        job_pubkey: String,
+    },
     /// D212: the session ended on the server (its grant or its 7-day window
     /// ran out) — the page goes to the sign-in screen and says `reason`.
     SessionEnded { reason: String },
@@ -898,4 +959,15 @@ pub struct PersonalGenesis {
     /// A u64, in decimal: JavaScript numbers cannot carry every u64.
     pub root_nonce: String,
     pub sigs: Vec<String>,
+}
+
+/// D336 part 3: one app that keeps data for this person, and whether it may
+/// work on it while they are away (since `since_ms`; 0 = not allowed).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobGrantInfo {
+    pub app: String,
+    pub name: String,
+    pub allowed: bool,
+    #[serde(default)]
+    pub since_ms: u64,
 }

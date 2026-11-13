@@ -39,10 +39,10 @@ Depend on a release by its tag:
 
 ```toml
 [dependencies]
-pvos-sdk = { git = "https://github.com/christcb03/pvos-sdk", tag = "v0.1.2" }
+pvos-sdk = { git = "https://github.com/christcb03/pvos-sdk", tag = "v0.1.3" }
 
 [dev-dependencies]
-pvos-devkit = { git = "https://github.com/christcb03/pvos-sdk", tag = "v0.1.2" }
+pvos-devkit = { git = "https://github.com/christcb03/pvos-sdk", tag = "v0.1.3" }
 ```
 
 ## What PVOS is

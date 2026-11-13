@@ -953,6 +953,44 @@ fn desktop_ws_frames_roundtrip() {
         r#"{"type":"renew_grant","token":"t"}"#
     );
     roundtrip(&ServerToDesktop::CompanionLocked);
+    // D336: the unlock of a session's app data.
+    roundtrip(&ServerToDesktop::DataKeyRequest { recipient: Some("02ab".into()), ephemeral_pubkey: Some("03cd".into()) });
+    assert_eq!(
+        serde_json::to_string(&ServerToDesktop::DataKeyRequest { recipient: None, ephemeral_pubkey: None }).unwrap(),
+        r#"{"type":"data_key_request"}"#
+    );
+    roundtrip(&ServerToDesktop::DataUnlocked);
+    roundtrip(&DesktopToServer::DataKeyAnswer { token: "t".into(), encryption_pub: "02ab".into(), kek: Some("ff".into()) });
+    assert_eq!(
+        serde_json::from_str::<DesktopToServer>(r#"{"type":"data_key_answer","token":"t","encryption_pub":"02ab"}"#).unwrap(),
+        DesktopToServer::DataKeyAnswer { token: "t".into(), encryption_pub: "02ab".into(), kek: None }
+    );
+    // D336 part 3: background work — the list, asking, a passkey page's
+    // signatures, and what the page is asked to sign.
+    roundtrip(&DesktopToServer::JobGrants { token: "t".into() });
+    roundtrip(&DesktopToServer::JobGrant { token: "t".into(), app: "media".into(), revoke: true });
+    assert_eq!(
+        serde_json::from_str::<DesktopToServer>(r#"{"type":"job_grant","token":"t","app":"media"}"#).unwrap(),
+        DesktopToServer::JobGrant { token: "t".into(), app: "media".into(), revoke: false },
+        "allowing is the default"
+    );
+    roundtrip(&DesktopToServer::JobCert { at: 7, sigs: vec!["ab".into()] });
+    roundtrip(&ServerToDesktop::JobGrants {
+        apps: vec![pvos_proto::JobGrantInfo { app: "media".into(), name: "Media".into(), allowed: true, since_ms: 9 }],
+    });
+    let req = ServerToDesktop::JobCertRequest {
+        revoke: true,
+        app: "media".into(),
+        member: "kim".into(),
+        rp_id: "pvos.example".into(),
+        forest_id: "f".into(),
+        root_node_id: "r".into(),
+        binding_sig: "s".into(),
+        node_id: String::new(),
+        job_pubkey: "02ab".into(),
+    };
+    roundtrip(&req);
+    assert!(!serde_json::to_string(&req).unwrap().contains("\"node_id\""), "a revoke names no node");
     roundtrip(&ServerToDesktop::SurfaceUpdate {
         app_id: "greeter".into(),
         surface: "main".into(),

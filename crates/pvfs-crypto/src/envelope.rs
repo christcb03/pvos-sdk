@@ -167,10 +167,23 @@ impl Envelope {
 /// content key comes back; the secret never leaves the caller.
 pub fn unwrap_content_key(wrap: &Wrap, recipient_secret: &SigningKey) -> Result<[u8; KEY_LEN]> {
     let k = kek(recipient_secret, &wrap.ephemeral_pubkey)?;
+    unwrap_with_kek(wrap, &k)
+}
+
+/// The key that opens ONE wrap: what the recipient's secret makes of the
+/// wrap's ephemeral key (PVOS D336). A browser holding the person's
+/// encryption key computes this (ECDH + blake3 `derive_key`, no AEAD) and
+/// hands it over to open that one wrap; the secret itself stays with it.
+pub fn wrap_kek(wrap: &Wrap, recipient_secret: &SigningKey) -> Result<[u8; KEY_LEN]> {
+    kek(recipient_secret, &wrap.ephemeral_pubkey)
+}
+
+/// Open one wrap with its key from [`wrap_kek`].
+pub fn unwrap_with_kek(wrap: &Wrap, k: &[u8; KEY_LEN]) -> Result<[u8; KEY_LEN]> {
     if wrap.nonce.len() != NONCE_LEN {
         return Err(bad("bad wrap nonce"));
     }
-    let key = aead(&k)?
+    let key = aead(k)?
         .decrypt(XNonce::from_slice(&wrap.nonce), wrap.wrapped_key.as_slice())
         .map_err(|_| bad("unwrap failed: wrong key or tampered wrap"))?;
     key.try_into().map_err(|_| bad("unwrapped key has wrong length"))
@@ -212,6 +225,33 @@ mod tests {
     use super::*;
     use crate::crypto;
     use crate::identity;
+
+    /// PVOS D336: a wrap's key, pinned with the browser's copy (PVOS
+    /// `web/datakey.test.mjs`, the same scalars through @noble): ECDH x of
+    /// secret 0x01…01 and the public key of 0x02…02, blake3 `derive_key`.
+    #[test]
+    fn wrap_kek_known_answer_and_round_trip() {
+        let s = SigningKey::from_slice(&[1u8; 32]).unwrap();
+        let e = SigningKey::from_slice(&[2u8; 32]).unwrap();
+        let eph = crypto::pubkey_bytes(&e);
+        assert_eq!(hex::encode(&eph), "024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766");
+        let wrap = Wrap { recipient_pubkey: crypto::pubkey_bytes(&s), ephemeral_pubkey: eph, nonce: vec![0; NONCE_LEN], wrapped_key: vec![] };
+        assert_eq!(
+            hex::encode(wrap_kek(&wrap, &s).unwrap()),
+            "c214ef82a73b19f95f7f18fdcfeec06707d163c7981f33889ab54770b8fc9f18"
+        );
+
+        let (k, pk) = keypair();
+        let sealed = seal(b"the data key", std::slice::from_ref(&pk)).unwrap();
+        let env = parse(&sealed).unwrap();
+        let w = env.wrap_for(&pk).unwrap();
+        let kek = wrap_kek(w, &k).unwrap();
+        let ck = unwrap_with_kek(w, &kek).unwrap();
+        assert_eq!(ck, unwrap_content_key(w, &k).unwrap());
+        assert_eq!(open_with_key(&env, &ck).unwrap(), b"the data key");
+        let (other, _) = keypair();
+        assert!(unwrap_with_kek(w, &wrap_kek(w, &other).unwrap()).is_err(), "another key's KEK opens nothing");
+    }
 
     fn keypair() -> (SigningKey, Vec<u8>) {
         let k = identity::device_key(&identity::generate_mnemonic().unwrap(), "", 0).unwrap();

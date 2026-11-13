@@ -39,8 +39,9 @@ pub fn verify_code(digest: &[u8; 32]) -> String {
 /// companion's (PVFS `pvfs-companion` proto.rs).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RelayPayload {
-    /// `"sign_in"`, `"user_action"`, or (D193) `"session_cert"`,
-    /// `"personal_genesis"`, `"confirm"`.
+    /// `"sign_in"`, `"user_action"`, (D193) `"session_cert"`,
+    /// `"personal_genesis"`, `"confirm"`, or (D336) `"job_cert"`,
+    /// `"job_revoke"`.
     pub kind: String,
     /// The paired server's pubkey (hex) — selects the pairing to verify with.
     pub server_pubkey: String,
@@ -60,6 +61,28 @@ pub struct RelayPayload {
     pub genesis: Option<GenesisFields>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<ConfirmFields>,
+    /// D336: an app's background work on the member's data, allowed or
+    /// stopped — the companion builds the events and writes the prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<JobGrantFields>,
+}
+
+/// D336: a job grant to make (`job_cert`: the job key a member of the
+/// member's personal forest, `rw` on `node_id`, no expiry) or end
+/// (`job_revoke`: the job key revoked). The forest must be one the member's
+/// owner key bound on this site, as for a session certificate.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobGrantFields {
+    pub member: String,
+    pub rp_id: String,
+    pub forest_id: String,
+    pub root_node_id: String,
+    pub binding_sig: String,
+    /// The app's name as the person knows it.
+    pub app: String,
+    #[serde(default)]
+    pub node_id: String,
+    pub job_pubkey: String,
 }
 
 /// D193: a sign-in's fields (pvos-core `login_digest` v2 inputs).

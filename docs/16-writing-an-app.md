@@ -160,6 +160,18 @@ revoked.
     Without the grant, `socket_addrs` uses the host's resolver, as before.
     Pin certificates as Monitoring does: a name's address is not the
     trust.
+  - `pvos.store` (D336): what you keep for one person — their settings,
+    their history — in THEIR forest, sealed to them: the box's owner
+    cannot read it. `conn.person_store_get(actor)` → `Option<Vec<u8>>`,
+    `conn.person_store_put(actor, bytes)`; one blob per app and person,
+    replaced whole. It answers `locked` until the person has unlocked
+    their data in this session; say so in your UI and keep nothing for
+    them elsewhere. Data that is shared (a library, a share link) does
+    not go here. Background work (D336 part 3): a person may allow your
+    app to work on what it keeps for them while they are away (their
+    Settings → Background work); `conn.person_store_jobs()` gives one
+    job actor per person who did, for `person_store_get`/`put` from a
+    scheduled job. Ask nobody to allow it unless a job needs it.
 
 - **Who may do what** (D259). A UI event carries an opaque `actor`. Ask
   `pvos.actors` `holds` with `{"actor", "cap"}` for a system capability

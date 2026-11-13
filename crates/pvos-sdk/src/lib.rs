@@ -1473,6 +1473,47 @@ impl AppConn {
         self.call(&ProviderId::pvos(), "pvos.dns", "resolve", serde_json::json!({ "name": name }))
     }
 
+    /// PVOS D336: what this app keeps for the person behind `actor` (the
+    /// handle a `UiEvent` carries) — kept in THEIR forest, sealed to them, so
+    /// the box's owner cannot read it. `None` until the app first stores
+    /// something. Needs a `Service` grant on `pvos.store` (the app's
+    /// manifest asks for it). Fails with `locked` while the person has not
+    /// unlocked their data this session. A job actor
+    /// ([`Self::person_store_jobs`]) works with nobody signed in.
+    pub fn person_store_get(&self, actor: &str) -> Result<Option<Vec<u8>>> {
+        let v = self.call(&ProviderId::pvos(), "pvos.store", "get", serde_json::json!({ "actor": actor }))?;
+        match v.get("data").and_then(|d| d.as_str()) {
+            Some(b64) => Ok(Some(base64_decode(b64)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// PVOS D336: replace what this app keeps for the person behind `actor`
+    /// (see [`Self::person_store_get`]).
+    pub fn person_store_put(&self, actor: &str, bytes: &[u8]) -> Result<()> {
+        self.call(
+            &ProviderId::pvos(),
+            "pvos.store",
+            "put",
+            serde_json::json!({ "actor": actor, "data": base64_encode(bytes) }),
+        )?;
+        Ok(())
+    }
+
+    /// PVOS D336 part 3: the job actors of the people who allowed this app
+    /// to work on what it keeps for them while they are away (their
+    /// Settings → Background work) — one each, stable until they stop it.
+    /// Pass one to [`Self::person_store_get`] / [`Self::person_store_put`]
+    /// from a scheduled job; nobody needs to be signed in. Empty when nobody
+    /// has allowed it.
+    pub fn person_store_jobs(&self) -> Result<Vec<String>> {
+        let v = self.call(&ProviderId::pvos(), "pvos.store", "jobs", serde_json::json!({}))?;
+        Ok(v.get("actors")
+            .and_then(|a| a.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .unwrap_or_default())
+    }
+
     /// PVOS D262: `host:port` → socket addresses, by PVOS's DNS setting —
     /// the shape `ureq::AgentBuilder::resolver` takes. Without the grant, or
     /// from a pvosd that does not know `pvos.dns`, it is the host's resolver,
@@ -1758,6 +1799,18 @@ pub fn app_key() -> Result<keys::identity::DeviceKeyCache> {
 }
 
 /// The key in `device.key`'s format: its hex, then its device index.
+fn base64_encode(bytes: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn base64_decode(text: &str) -> Result<Vec<u8>> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD
+        .decode(text)
+        .map_err(|_| SdkError::Protocol("person store: the data is not base64".into()))
+}
+
 fn parse_app_key(text: &str) -> Result<keys::identity::DeviceKeyCache> {
     let bad = |why: &str| SdkError::Protocol(format!("the app key pvosd handed over: {why}"));
     let mut lines = text.lines();
